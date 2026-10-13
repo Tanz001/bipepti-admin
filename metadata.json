@@ -1,0 +1,6 @@
+{
+  "name": "BIOPEPTI - B2B Peptide Catalog Admin",
+  "description": "Modern, high-performance SaaS admin dashboard for managing research peptides, specifications, stock, and pricing for BIOPEPTI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
