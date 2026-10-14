@@ -15,7 +15,14 @@ import {
   Plus,
   ChevronLeft,
 } from 'lucide-react';
-import { Product, StockStatus } from '../../types/product';
+import {
+  Product,
+  StockStatus,
+  formatPriceRange,
+  getOverallStock,
+  getProductVariants,
+  getStrengthsLabel,
+} from '../../types/product';
 import { useProducts } from '../../context/ProductsContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -117,38 +124,12 @@ export const ProductTable: React.FC = () => {
   // Active menu dropdown ID
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // Expanded group rows (e.g. grouped by name)
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
-  const toggleGroupExpand = (groupName: string) => {
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [groupName]: !prev[groupName],
-    }));
+  const toggleRowExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
   };
-
-  // Group products by base name if groupByProduct is active
-  const groupedData = React.useMemo(() => {
-    if (!filters.groupByProduct) {
-      return { isGrouped: false, groups: [] };
-    }
-
-    const groupMap = new Map<string, Product[]>();
-    paginatedProducts.forEach((prod) => {
-      const existing = groupMap.get(prod.name) || [];
-      existing.push(prod);
-      groupMap.set(prod.name, existing);
-    });
-
-    return {
-      isGrouped: true,
-      groups: Array.from(groupMap.entries()).map(([name, items]) => ({
-        name,
-        items,
-        hasMultiple: items.length > 1,
-      })),
-    };
-  }, [paginatedProducts, filters.groupByProduct]);
 
   // Loading Skeletons
   if (loading) {
@@ -217,26 +198,26 @@ export const ProductTable: React.FC = () => {
     );
   }
 
-  // Row Renderer
-  const renderRow = (product: Product, isSubRow: boolean = false) => {
+  const renderRow = (product: Product) => {
     const isSelected = selectedIds.includes(product.id);
     const isMenuOpen = activeMenuId === product.id;
+    const variants = getProductVariants(product);
+    const hasMultiple = variants.length > 1;
+    const isExpanded = !!expandedRows[product.id];
 
     return (
+      <React.Fragment key={product.id}>
       <tr
-        key={product.id}
         onClick={() => openEditDrawer(product)}
         className={`group transition-colors cursor-pointer select-none ${
           isSelected
             ? 'bg-[#EAF3FD]/60 hover:bg-[#EAF3FD]'
-            : isSubRow
-            ? 'bg-[#FAFBFD] hover:bg-[#F1F5F9]'
             : 'hover:bg-[#F8FAFC]'
         }`}
       >
         {/* Checkbox */}
         <td
-          className={`py-3.5 px-4 ${isSubRow ? 'pl-8' : ''}`}
+          className="py-3.5 px-4"
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -244,13 +225,27 @@ export const ProductTable: React.FC = () => {
             checked={isSelected}
             onChange={() => toggleSelect(product.id)}
             className="w-4 h-4 rounded text-[#1C7FDB] focus:ring-[#1C7FDB] border-slate-300 cursor-pointer"
-            aria-label={`Select ${product.name} ${product.spec}`}
+            aria-label={`Select ${product.name}`}
           />
         </td>
 
-        {/* Product: Thumbnail + Name + Spec */}
+        {/* Product: Thumbnail + Name + Strengths */}
         <td className="py-3.5 px-4">
           <div className="flex items-center gap-3">
+            {hasMultiple && (
+              <button
+                type="button"
+                onClick={(e) => toggleRowExpand(product.id, e)}
+                className="p-0.5 text-[#5F7088] hover:text-[#1C7FDB]"
+                aria-label={isExpanded ? 'Collapse strengths' : 'Expand strengths'}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </button>
+            )}
             <div className="w-10 h-10 rounded-xl bg-slate-100 border border-[#E3EAF2] overflow-hidden shrink-0 flex items-center justify-center">
               <img
                 src={product.image || 'https://via.placeholder.com/40'}
@@ -264,16 +259,15 @@ export const ProductTable: React.FC = () => {
                 <span className="font-semibold text-sm text-[#0A2358] group-hover:text-[#1C7FDB] transition-colors truncate">
                   {product.name}
                 </span>
-                {product.featured && (
-                  <span className="text-[10px] font-semibold text-[#12B8A6] bg-[#12B8A6]/10 px-1.5 py-0.2 rounded">
-                    Featured
+                {hasMultiple && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#1C7FDB] bg-[#EAF3FD] px-1.5 py-0.5 rounded-full">
+                    <Layers className="w-3 h-3" />
+                    {variants.length}
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#5F7088] mt-0.5">
-                <span className="font-medium text-slate-600">{product.spec}</span>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono text-[11px]">{product.purity}% pure</span>
+              <div className="text-xs text-[#5F7088] mt-0.5 truncate">
+                {getStrengthsLabel(product)}
               </div>
             </div>
           </div>
@@ -295,21 +289,16 @@ export const ProductTable: React.FC = () => {
           </span>
         </td>
 
-        {/* Price (mono right-aligned) */}
+        {/* Price range */}
         <td className="py-3.5 px-4 text-right">
           <div className="font-mono font-bold text-sm text-[#0A2358] tabular-nums">
-            ${product.price.toFixed(2)}
+            {formatPriceRange(product)}
           </div>
-          {product.comparePrice && (
-            <div className="font-mono text-xs text-[#5F7088] line-through tabular-nums">
-              ${product.comparePrice.toFixed(2)}
-            </div>
-          )}
         </td>
 
         {/* Stock status pill */}
         <td className="py-3.5 px-4">
-          <StockStatusBadge status={product.stock} />
+          <StockStatusBadge status={getOverallStock(product)} />
         </td>
 
         {/* Status Toggle Switch (Active / Draft) */}
@@ -390,6 +379,29 @@ export const ProductTable: React.FC = () => {
           )}
         </td>
       </tr>
+
+      {isExpanded &&
+        variants.map((variant) => (
+          <tr key={variant.id} className="bg-[#FAFBFD]">
+            <td className="py-2 px-4" />
+            <td className="py-2 px-4 pl-16 text-xs text-[#5F7088]">
+              <span className="font-medium text-[#0A2358]">{variant.strength}</span>
+              {variant.sku && (
+                <span className="ml-2 font-mono text-[10px] text-[#5F7088]">{variant.sku}</span>
+              )}
+            </td>
+            <td className="py-2 px-4" />
+            <td className="py-2 px-4" />
+            <td className="py-2 px-4 text-right font-mono text-xs font-semibold text-[#0A2358]">
+              ${variant.price.toFixed(2)}
+            </td>
+            <td className="py-2 px-4">
+              <StockStatusBadge status={variant.stock} />
+            </td>
+            <td className="py-2 px-4" colSpan={3} />
+          </tr>
+        ))}
+      </React.Fragment>
     );
   };
 
@@ -397,7 +409,6 @@ export const ProductTable: React.FC = () => {
     <div className="bg-white rounded-2xl border border-[#E3EAF2] shadow-card overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
-          {/* Sticky Header */}
           <thead className="bg-[#F8FAFC] border-b border-[#E3EAF2] text-[11px] font-semibold tracking-wider uppercase text-[#5F7088] select-none sticky top-0 z-10">
             <tr>
               <th className="py-3.5 px-4 w-10">
@@ -421,50 +432,7 @@ export const ProductTable: React.FC = () => {
           </thead>
 
           <tbody className="divide-y divide-[#E3EAF2] text-sm">
-            {groupedData.isGrouped
-              ? groupedData.groups.map((group) => {
-                  if (group.hasMultiple) {
-                    const isExpanded = !!expandedGroups[group.name];
-                    return (
-                      <React.Fragment key={`group-${group.name}`}>
-                        {/* Parent Group Header Row */}
-                        <tr
-                          onClick={() => toggleGroupExpand(group.name)}
-                          className="bg-[#F5F8FB]/80 hover:bg-[#EAF3FD]/60 cursor-pointer transition-colors"
-                        >
-                          <td className="py-2.5 px-4 text-center">
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4 text-[#1C7FDB] inline" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 text-[#5F7088] inline" />
-                            )}
-                          </td>
-                          <td colSpan={8} className="py-2.5 px-4">
-                            <div className="flex items-center gap-3">
-                              <span className="font-bold text-sm text-[#0A2358]">
-                                {group.name}
-                              </span>
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1C7FDB] bg-[#EAF3FD] px-2 py-0.5 rounded-full font-mono">
-                                <Layers className="w-3 h-3" />
-                                {group.items.length} specs available
-                              </span>
-                              <span className="text-xs text-[#5F7088]">
-                                ({group.items.map((i) => i.spec).join(', ')})
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* Child Rows when expanded */}
-                        {isExpanded &&
-                          group.items.map((prod) => renderRow(prod, true))}
-                      </React.Fragment>
-                    );
-                  }
-                  // Single item in group
-                  return renderRow(group.items[0], false);
-                })
-              : paginatedProducts.map((prod) => renderRow(prod, false))}
+            {paginatedProducts.map((prod) => renderRow(prod))}
           </tbody>
         </table>
       </div>

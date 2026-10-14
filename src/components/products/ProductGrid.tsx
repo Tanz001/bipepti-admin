@@ -1,6 +1,6 @@
 import React from 'react';
 import { Edit2, CopyPlus, Trash2, Check, Copy } from 'lucide-react';
-import { Product } from '../../types/product';
+import { formatPriceRange, getProductVariants, getStrengthsLabel } from '../../types/product';
 import { useProducts } from '../../context/ProductsContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -54,12 +54,13 @@ export const ProductGrid: React.FC = () => {
                 </span>
               </div>
 
-              {/* Purity badge top left */}
-              <div className="absolute top-2.5 left-2.5">
-                <span className="text-[10px] font-mono font-bold bg-[#0A2358]/80 text-white px-2 py-0.5 rounded-md backdrop-blur-xs">
-                  {product.purity}% Purity
-                </span>
-              </div>
+              {getProductVariants(product).length > 1 && (
+                <div className="absolute top-2.5 left-2.5">
+                  <span className="text-[10px] font-bold bg-[#0A2358]/80 text-white px-2 py-0.5 rounded-md backdrop-blur-xs">
+                    {getProductVariants(product).length} strengths
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Title & Category */}
@@ -68,7 +69,7 @@ export const ProductGrid: React.FC = () => {
                 <h4 className="font-['Sora'] font-bold text-base text-[#0A2358] group-hover:text-[#1C7FDB] transition-colors line-clamp-1">
                   {product.name}
                 </h4>
-                <p className="text-xs font-medium text-[#5F7088]">{product.spec}</p>
+                <p className="text-xs font-medium text-[#5F7088]">{getStrengthsLabel(product)}</p>
               </div>
 
               {/* SKU pill */}
@@ -95,10 +96,10 @@ export const ProductGrid: React.FC = () => {
           <div className="mt-4 pt-3 border-t border-[#E3EAF2] flex items-center justify-between">
             <div>
               <span className="text-[10px] text-[#5F7088] uppercase tracking-wider block font-medium">
-                Unit Price
+                Price
               </span>
               <span className="font-mono font-bold text-lg text-[#0A2358] tabular-nums">
-                ${product.price.toFixed(2)}
+                {formatPriceRange(product)}
               </span>
             </div>
 

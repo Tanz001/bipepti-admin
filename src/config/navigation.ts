@@ -1,61 +1,38 @@
-import { LucideIcon, Package, ShoppingCart, FileText, ShieldCheck, Users, Settings } from 'lucide-react';
+import { LucideIcon, LayoutDashboard, Package, Settings } from 'lucide-react';
 
 export interface NavItemConfig {
   id: string;
   label: string;
   href: string;
   icon: LucideIcon;
-  badge?: string | number;
-  badgeType?: 'count' | 'pill';
-  enabled?: boolean;
+  badgeType?: 'count';
 }
 
 export const SIDEBAR_NAV_ITEMS: NavItemConfig[] = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    href: '/admin/dashboard',
+    icon: LayoutDashboard,
+  },
   {
     id: 'products',
     label: 'Products',
     href: '/admin/products',
     icon: Package,
-    badgeType: 'count', // dynamic product count
-    enabled: true,
-  },
-  {
-    id: 'orders',
-    label: 'Orders',
-    href: '/admin/orders',
-    icon: ShoppingCart,
-    badge: '14',
-    badgeType: 'pill',
-    enabled: true,
-  },
-  {
-    id: 'quotes',
-    label: 'Quotes',
-    href: '/admin/quotes',
-    icon: FileText,
-    badge: '3',
-    badgeType: 'pill',
-    enabled: true,
-  },
-  {
-    id: 'coa',
-    label: 'COA Reports',
-    href: '/admin/coa',
-    icon: ShieldCheck,
-    enabled: true,
-  },
-  {
-    id: 'customers',
-    label: 'Customers',
-    href: '/admin/customers',
-    icon: Users,
-    enabled: true,
+    badgeType: 'count',
   },
   {
     id: 'settings',
     label: 'Settings',
     href: '/admin/settings',
     icon: Settings,
-    enabled: true,
   },
 ];
+
+export function getNavLabel(pathname: string): string {
+  const match = SIDEBAR_NAV_ITEMS.find(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+  );
+  return match?.label ?? 'Admin';
+}

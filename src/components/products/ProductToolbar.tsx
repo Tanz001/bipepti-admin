@@ -35,30 +35,29 @@ export const ProductToolbar: React.FC = () => {
     const headers = [
       'SKU',
       'Name',
-      'Specification',
+      'Strengths',
       'Category',
-      'Price (USD)',
-      'Compare Price',
-      'Stock Status',
-      'Purity (%)',
+      'Price Range (USD)',
       'Status',
-      'CAS Number',
-      'Test Method',
     ];
 
-    const rows = filteredProducts.map((p) => [
-      `"${p.sku}"`,
-      `"${p.name.replace(/"/g, '""')}"`,
-      `"${p.spec.replace(/"/g, '""')}"`,
-      `"${p.category.replace(/"/g, '""')}"`,
-      p.price,
-      p.comparePrice || '',
-      p.stock,
-      p.purity,
-      p.status,
-      `"${p.casNumber || ''}"`,
-      `"${p.testMethod || ''}"`,
-    ]);
+    const rows = filteredProducts.map((p) => {
+      const strengths = (p.variants || [])
+        .map((v) => `${v.strength}:$${v.price}`)
+        .join(' | ');
+      const prices = (p.variants || []).map((v) => v.price);
+      const min = prices.length ? Math.min(...prices) : p.price || 0;
+      const max = prices.length ? Math.max(...prices) : p.price || 0;
+      const range = min === max ? String(min) : `${min}-${max}`;
+      return [
+        `"${p.sku}"`,
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${strengths.replace(/"/g, '""')}"`,
+        `"${p.category.replace(/"/g, '""')}"`,
+        `"${range}"`,
+        p.status,
+      ];
+    });
 
     const csvContent =
       'data:text/csv;charset=utf-8,' +

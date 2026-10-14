@@ -74,11 +74,11 @@ export const BiopeptiLogo: React.FC<BiopeptiLogoProps> = ({
               Biopepti
             </span>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[#12B8A6] bg-[#12B8A6]/10 px-1.5 py-0.5 rounded-sm">
-              B2B
+              Admin
             </span>
           </div>
           <span className="text-[11px] font-medium tracking-tight text-[#5F7088] -mt-0.5">
-            Research Catalog
+            Catalog Manager
           </span>
         </div>
       )}

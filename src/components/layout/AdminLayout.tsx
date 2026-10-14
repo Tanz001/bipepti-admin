@@ -48,7 +48,7 @@ export const AdminLayout: React.FC = () => {
       {/* Main Content Area */}
       <div
         className={`flex-1 flex flex-col transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-          isSidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[264px]'
+          isSidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[240px]'
         }`}
       >
         <AdminTopBar

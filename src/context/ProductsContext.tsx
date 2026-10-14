@@ -7,9 +7,19 @@ import React, {
   useMemo,
   ReactNode,
 } from 'react';
-import { Product, ProductFilterState, StockStatus } from '../types/product';
+import {
+  Product,
+  ProductFilterState,
+  getOverallStock,
+  getPriceRange,
+  getProductVariants,
+  getStrengthsLabel,
+} from '../types/product';
 import * as productsApi from '../lib/productsApi';
+import type { ProductInput } from '../lib/productsApi';
+import { CATEGORIES } from '../data/seedProducts';
 import { useToast } from './ToastContext';
+import { useAuth } from './AuthContext';
 
 interface ProductsContextType {
   products: Product[];
@@ -48,8 +58,12 @@ interface ProductsContextType {
   bulkDelete: () => Promise<void>;
 
   // CRUD Operations
-  createProduct: (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Product>;
-  updateProduct: (id: string, updates: Partial<Product>) => Promise<Product>;
+  createProduct: (data: ProductInput, imageFile?: File | null) => Promise<Product>;
+  updateProduct: (
+    id: string,
+    updates: Partial<ProductInput>,
+    imageFile?: File | null
+  ) => Promise<Product>;
   deleteProduct: (id: string) => Promise<void>;
   duplicateProduct: (product: Product) => Promise<void>;
   toggleProductStatus: (id: string) => Promise<void>;
@@ -97,6 +111,7 @@ const defaultFilters: ProductFilterState = {
 const ProductsContext = createContext<ProductsContextType | undefined>(undefined);
 
 export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isAuthenticated, authReady } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +132,11 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const { showSuccess, showError, showUndoToast } = useToast();
 
   const loadProducts = useCallback(async () => {
+    if (!isAuthenticated) {
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -128,15 +148,16 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
     } finally {
       setLoading(false);
     }
-  }, [showError]);
+  }, [isAuthenticated, showError]);
 
   useEffect(() => {
+    if (!authReady) return;
     loadProducts();
-  }, [loadProducts]);
+  }, [authReady, loadProducts]);
 
   // Categories list
   const allCategories = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(CATEGORIES as unknown as string[]);
     products.forEach((p) => {
       if (p.category) set.add(p.category);
     });
@@ -188,17 +209,23 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
-    // Search query: name, SKU, spec, description
+    // Search: name, SKU, strengths, description
     if (filters.search.trim()) {
       const q = filters.search.toLowerCase().trim();
-      result = result.filter(
-        (p) =>
+      result = result.filter((p) => {
+        const variants = getProductVariants(p);
+        return (
           p.name.toLowerCase().includes(q) ||
           p.sku.toLowerCase().includes(q) ||
-          p.spec.toLowerCase().includes(q) ||
-          (p.casNumber && p.casNumber.toLowerCase().includes(q)) ||
-          (p.tags && p.tags.some((t) => t.toLowerCase().includes(q)))
-      );
+          getStrengthsLabel(p).toLowerCase().includes(q) ||
+          (p.description && p.description.toLowerCase().includes(q)) ||
+          variants.some(
+            (v) =>
+              v.strength.toLowerCase().includes(q) ||
+              (v.sku && v.sku.toLowerCase().includes(q))
+          )
+        );
+      });
     }
 
     // Category filter
@@ -209,7 +236,7 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
     // Status filter
     if (filters.status && filters.status !== 'all') {
       if (filters.status === 'out_of_stock') {
-        result = result.filter((p) => p.stock === 'out_of_stock');
+        result = result.filter((p) => getOverallStock(p) === 'out_of_stock');
       } else {
         result = result.filter((p) => p.status === filters.status);
       }
@@ -221,9 +248,9 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
         case 'name-asc':
           return a.name.localeCompare(b.name);
         case 'price-asc':
-          return a.price - b.price;
+          return getPriceRange(a).min - getPriceRange(b).min;
         case 'price-desc':
-          return b.price - a.price;
+          return getPriceRange(b).min - getPriceRange(a).min;
         case 'newest':
         default:
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -323,9 +350,9 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   // Single CRUD
   const createProduct = useCallback(
-    async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+    async (data: ProductInput, imageFile?: File | null) => {
       try {
-        const created = await productsApi.createProduct(data);
+        const created = await productsApi.createProduct(data, imageFile);
         setProducts((prev) => [created, ...prev]);
         showSuccess(`Product "${created.name}" created`, `SKU: ${created.sku}`);
         return created;
@@ -338,9 +365,9 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
   );
 
   const updateProduct = useCallback(
-    async (id: string, updates: Partial<Product>) => {
+    async (id: string, updates: Partial<ProductInput>, imageFile?: File | null) => {
       try {
-        const updated = await productsApi.updateProduct(id, updates);
+        const updated = await productsApi.updateProduct(id, updates, imageFile);
         setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
         showSuccess('Product saved', `Updated ${updated.name} (${updated.sku})`);
         return updated;
@@ -364,7 +391,7 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
         // 5-second undo toast as requested!
         showUndoToast(
-          `Deleted "${target.name} ${target.spec}"`,
+          `Deleted "${target.name}"`,
           async () => {
             try {
               const restored = await productsApi.restoreProduct(target);
@@ -388,11 +415,20 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
       const baseSku = product.sku.replace(/-COPY(-\d+)?$/, '');
       const newSku = `${baseSku}-COPY`;
 
-      const duplicatePayload: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
-        ...product,
+      const variants = getProductVariants(product).map((v) => ({
+        ...v,
+        id: `var-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+      }));
+
+      const duplicatePayload: ProductInput = {
         name: `${product.name} (Copy)`,
         sku: newSku,
+        category: product.category,
+        variants,
         status: 'draft',
+        featured: false,
+        description: product.description,
+        purity: product.purity,
       };
 
       try {
@@ -438,7 +474,7 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
       const fresh = await productsApi.resetToSeed();
       setProducts(fresh);
       setSelectedIds([]);
-      showSuccess('Catalog reset to sample seeds', '30 realistic peptide products restored.');
+      showSuccess('Catalog reset to sample seeds', 'Sample products restored.');
     } catch (e: any) {
       showError('Failed to reset catalog', e?.message);
     }
@@ -502,7 +538,7 @@ export const ProductsProvider: React.FC<{ children: ReactNode }> = ({ children }
     const total = products.length;
     const active = products.filter((p) => p.status === 'active').length;
     const draft = products.filter((p) => p.status === 'draft').length;
-    const outOfStock = products.filter((p) => p.stock === 'out_of_stock').length;
+    const outOfStock = products.filter((p) => getOverallStock(p) === 'out_of_stock').length;
     const uniqueCats = new Set(products.map((p) => p.category)).size;
 
     return {

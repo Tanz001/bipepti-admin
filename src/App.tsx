@@ -6,23 +6,30 @@ import {
   Navigate,
   useLocation,
 } from 'react-router-dom';
-import { ShoppingCart, FileText, ShieldCheck, Users, Settings } from 'lucide-react';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { ProductsProvider } from './context/ProductsContext';
 
 import { AdminLayout } from './components/layout/AdminLayout';
+import { DashboardPage } from './pages/DashboardPage';
 import { ProductsPage } from './pages/ProductsPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { LoginPage } from './pages/LoginPage';
-import { SectionPlaceholderPage } from './pages/SectionPlaceholderPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { StorefrontPreviewModal } from './components/products/StorefrontPreviewModal';
 
-// Route guard component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authReady } = useAuth();
   const location = useLocation();
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F5F8FB] text-sm text-[#5F7088]">
+        Loading…
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/admin/login" state={{ from: location }} replace />;
@@ -31,7 +38,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-// Fullscreen Public Storefront Page for /website-preview
 const FullStorefrontPage: React.FC = () => {
   return (
     <StorefrontPreviewModal
@@ -50,13 +56,9 @@ export default function App() {
         <ToastProvider>
           <ProductsProvider>
             <Routes>
-              {/* Public Login Route */}
               <Route path="/admin/login" element={<LoginPage />} />
-
-              {/* Direct Website Preview */}
               <Route path="/website-preview" element={<FullStorefrontPage />} />
 
-              {/* Protected Admin Routes */}
               <Route
                 path="/admin"
                 element={
@@ -65,69 +67,13 @@ export default function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/admin/products" replace />} />
+                <Route index element={<Navigate to="/admin/dashboard" replace />} />
+                <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="products" element={<ProductsPage />} />
-                <Route
-                  path="orders"
-                  element={
-                    <SectionPlaceholderPage
-                      title="B2B Orders & Invoices"
-                      subtitle="Manage wholesale purchase orders, payment terms, and automated shipping manifests."
-                      icon={ShoppingCart}
-                      badge="14 Active Inquiries"
-                    />
-                  }
-                />
-                <Route
-                  path="quotes"
-                  element={
-                    <SectionPlaceholderPage
-                      title="Custom Synthesis Quotes"
-                      subtitle="Review custom peptide sequence requests, gram-scale volume inquiries, and purity requirements."
-                      icon={FileText}
-                      badge="3 Pending Requests"
-                    />
-                  }
-                />
-                <Route
-                  path="coa"
-                  element={
-                    <SectionPlaceholderPage
-                      title="COA & Batch Testing Reports"
-                      subtitle="High-Performance Liquid Chromatography (HPLC) and Mass Spectrometry (MS) batch certificate management."
-                      icon={ShieldCheck}
-                      badge="Certificates Repository"
-                    />
-                  }
-                />
-                <Route
-                  path="customers"
-                  element={
-                    <SectionPlaceholderPage
-                      title="Institutional Clients"
-                      subtitle="Manage verified research laboratories, university accounts, and tier-based trade discounts."
-                      icon={Users}
-                      badge="Client Directory"
-                    />
-                  }
-                />
-                <Route
-                  path="settings"
-                  element={
-                    <SectionPlaceholderPage
-                      title="Catalog Settings & API"
-                      subtitle="Configure inventory alerts, currency defaults, shipping zones, and webhook integrations."
-                      icon={Settings}
-                      badge="System Preferences"
-                    />
-                  }
-                />
+                <Route path="settings" element={<SettingsPage />} />
               </Route>
 
-              {/* Root redirect */}
-              <Route path="/" element={<Navigate to="/admin/products" replace />} />
-
-              {/* 404 Route */}
+              <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </ProductsProvider>

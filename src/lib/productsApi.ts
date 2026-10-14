@@ -1,270 +1,234 @@
-import { Product } from '../types/product';
-import { SEED_PRODUCTS } from '../data/seedProducts';
+import { apiRequest, resolveMediaUrl } from './api';
+import type { Product, ProductVariant } from '../types/product';
+import { CATEGORIES } from '../data/seedProducts';
 
-const STORAGE_KEY = 'biopepti_catalog_products_v1';
-
-// Simulate realistic async network delay (50-150ms) to mirror a real API
-const delay = (ms: number = 80) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function loadStorage(): Product[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_PRODUCTS));
-      return [...SEED_PRODUCTS];
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_PRODUCTS));
-      return [...SEED_PRODUCTS];
-    }
-    return parsed;
-  } catch (err) {
-    console.error('Failed to read products from localStorage:', err);
-    return [...SEED_PRODUCTS];
-  }
-}
-
-function saveStorage(products: Product[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-  } catch (err) {
-    console.error('Failed to save products to localStorage:', err);
-  }
-}
-
-/**
- * Fetch all catalog products
- */
-export async function getProducts(): Promise<Product[]> {
-  await delay(60);
-  return loadStorage();
-}
-
-/**
- * Fetch a single product by ID
- */
-export async function getProductById(id: string): Promise<Product | null> {
-  await delay(40);
-  const items = loadStorage();
-  return items.find((p) => p.id === id) || null;
-}
-
-/**
- * Create a new product
- */
-export async function createProduct(
-  data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>
-): Promise<Product> {
-  await delay(120);
-  const items = loadStorage();
-
-  // Validate unique SKU
-  const existingSku = items.find((p) => p.sku.trim().toUpperCase() === data.sku.trim().toUpperCase());
-  if (existingSku) {
-    throw new Error(`SKU "${data.sku}" is already in use by ${existingSku.name}`);
-  }
-
-  const newId = `prod-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-  const now = new Date().toISOString();
-
-  const newProduct: Product = {
-    ...data,
-    id: newId,
-    createdAt: now,
-    updatedAt: now,
+interface ProductsListResponse {
+  success: boolean;
+  products: Product[];
+  categories?: string[];
+  pagination?: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
   };
-
-  const updated = [newProduct, ...items];
-  saveStorage(updated);
-  return newProduct;
 }
 
-/**
- * Update an existing product
- */
+interface ProductResponse {
+  success: boolean;
+  product: Product;
+  message?: string;
+}
+
+function normalizeProduct(p: Product): Product {
+  return {
+    ...p,
+    image: resolveMediaUrl(p.image),
+    featured: Boolean(p.featured),
+    variants: (p.variants || []).map((v: ProductVariant) => ({
+      ...v,
+      price: Number(v.price),
+    })),
+    price: p.price != null ? Number(p.price) : undefined,
+    purity: p.purity != null ? Number(p.purity) : undefined,
+  };
+}
+
+export type ProductInput = {
+  name: string;
+  sku: string;
+  category: string;
+  description?: string;
+  status?: 'active' | 'draft';
+  featured?: boolean;
+  purity?: number;
+  buyLink?: string;
+  variants: ProductVariant[];
+  /** Existing server image path (keep when not uploading a new file) */
+  image?: string;
+};
+
+function buildFormData(data: ProductInput, imageFile?: File | null): FormData {
+  const form = new FormData();
+  form.append('name', data.name);
+  form.append('sku', data.sku);
+  form.append('category', data.category);
+  form.append('status', data.status || 'active');
+  form.append('featured', data.featured ? 'true' : 'false');
+  if (data.description != null) form.append('description', data.description);
+  if (data.purity != null) form.append('purity', String(data.purity));
+  if (data.buyLink != null) form.append('buyLink', data.buyLink);
+  form.append(
+    'variants',
+    JSON.stringify(
+      data.variants.map((v) => ({
+        id: v.id,
+        strength: v.strength,
+        price: v.price,
+        stock: v.stock,
+        sku: v.sku || undefined,
+      }))
+    )
+  );
+
+  if (imageFile) {
+    form.append('image', imageFile);
+  }
+
+  return form;
+}
+
+export async function getProducts(): Promise<Product[]> {
+  const data = await apiRequest<ProductsListResponse>('/api/products?pageSize=100');
+  return (data.products || []).map(normalizeProduct);
+}
+
+export async function getProductById(id: string): Promise<Product | null> {
+  try {
+    const data = await apiRequest<ProductResponse>(`/api/products/${id}`);
+    return normalizeProduct(data.product);
+  } catch {
+    return null;
+  }
+}
+
+export async function createProduct(
+  data: ProductInput,
+  imageFile?: File | null
+): Promise<Product> {
+  const form = buildFormData(data, imageFile);
+  const res = await apiRequest<ProductResponse>('/api/products', {
+    method: 'POST',
+    formData: form,
+  });
+  return normalizeProduct(res.product);
+}
+
 export async function updateProduct(
   id: string,
-  updates: Partial<Omit<Product, 'id' | 'createdAt'>>
+  updates: Partial<ProductInput>,
+  imageFile?: File | null
 ): Promise<Product> {
-  await delay(100);
-  const items = loadStorage();
-  const index = items.findIndex((p) => p.id === id);
-
-  if (index === -1) {
-    throw new Error(`Product with ID "${id}" was not found.`);
-  }
-
-  // If SKU is changed, check uniqueness
-  if (updates.sku && updates.sku.trim().toUpperCase() !== items[index].sku.trim().toUpperCase()) {
-    const existing = items.find(
-      (p) => p.id !== id && p.sku.trim().toUpperCase() === updates.sku!.trim().toUpperCase()
+  // Prefer multipart when uploading a file or sending variants
+  const form = new FormData();
+  if (updates.name != null) form.append('name', updates.name);
+  if (updates.sku != null) form.append('sku', updates.sku);
+  if (updates.category != null) form.append('category', updates.category);
+  if (updates.description != null) form.append('description', updates.description);
+  if (updates.status != null) form.append('status', updates.status);
+  if (updates.featured != null) form.append('featured', updates.featured ? 'true' : 'false');
+  if (updates.purity != null) form.append('purity', String(updates.purity));
+  if (updates.buyLink != null) form.append('buyLink', updates.buyLink);
+  if (updates.variants) {
+    form.append(
+      'variants',
+      JSON.stringify(
+        updates.variants.map((v) => ({
+          id: v.id,
+          strength: v.strength,
+          price: v.price,
+          stock: v.stock,
+          sku: v.sku || undefined,
+        }))
+      )
     );
-    if (existing) {
-      throw new Error(`SKU "${updates.sku}" is already used by ${existing.name}`);
-    }
   }
+  if (imageFile) form.append('image', imageFile);
 
-  const updatedItem: Product = {
-    ...items[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
-
-  items[index] = updatedItem;
-  saveStorage(items);
-  return updatedItem;
+  const res = await apiRequest<ProductResponse>(`/api/products/${id}`, {
+    method: 'PUT',
+    formData: form,
+  });
+  return normalizeProduct(res.product);
 }
 
-/**
- * Delete a single product
- */
 export async function deleteProduct(id: string): Promise<void> {
-  await delay(80);
-  const items = loadStorage();
-  const filtered = items.filter((p) => p.id !== id);
-  if (filtered.length === items.length) {
-    throw new Error(`Product with ID "${id}" was not found.`);
-  }
-  saveStorage(filtered);
+  await apiRequest(`/api/products/${id}`, { method: 'DELETE' });
 }
 
-/**
- * Restore a deleted product (e.g. for 5-second undo)
- */
+/** Re-create a deleted product (used for undo). */
 export async function restoreProduct(product: Product): Promise<Product> {
-  await delay(50);
-  const items = loadStorage();
-  const exists = items.some((p) => p.id === product.id);
-  if (!exists) {
-    items.unshift(product);
-    saveStorage(items);
-  }
-  return product;
+  return createProduct({
+    name: product.name,
+    sku: product.sku,
+    category: product.category,
+    description: product.description,
+    status: product.status,
+    featured: product.featured,
+    purity: product.purity,
+    variants: product.variants || [],
+  });
 }
 
-/**
- * Bulk update product status
- */
 export async function bulkUpdateStatus(
   ids: string[],
   status: 'active' | 'draft'
 ): Promise<Product[]> {
-  await delay(100);
-  const items = loadStorage();
-  const now = new Date().toISOString();
-  const idSet = new Set(ids);
-
-  const updated = items.map((p) => {
-    if (idSet.has(p.id)) {
-      return { ...p, status, updatedAt: now };
-    }
-    return p;
-  });
-
-  saveStorage(updated);
-  return updated.filter((p) => idSet.has(p.id));
+  const results: Product[] = [];
+  for (const id of ids) {
+    results.push(await updateProduct(id, { status }));
+  }
+  return results;
 }
 
-/**
- * Bulk update product category
- */
-export async function bulkUpdateCategory(
-  ids: string[],
-  category: string
-): Promise<Product[]> {
-  await delay(100);
-  const items = loadStorage();
-  const now = new Date().toISOString();
-  const idSet = new Set(ids);
-
-  const updated = items.map((p) => {
-    if (idSet.has(p.id)) {
-      return { ...p, category, updatedAt: now };
-    }
-    return p;
-  });
-
-  saveStorage(updated);
-  return updated.filter((p) => idSet.has(p.id));
+export async function bulkUpdateCategory(ids: string[], category: string): Promise<Product[]> {
+  const results: Product[] = [];
+  for (const id of ids) {
+    results.push(await updateProduct(id, { category }));
+  }
+  return results;
 }
 
-/**
- * Bulk delete products
- */
 export async function bulkDeleteProducts(ids: string[]): Promise<void> {
-  await delay(120);
-  const items = loadStorage();
-  const idSet = new Set(ids);
-  const remaining = items.filter((p) => !idSet.has(p.id));
-  saveStorage(remaining);
+  for (const id of ids) {
+    await deleteProduct(id);
+  }
 }
 
-/**
- * Import batch of products from CSV/JSON
- */
 export async function importProducts(
   incoming: Partial<Product>[]
 ): Promise<{ importedCount: number; errors: string[] }> {
-  await delay(200);
-  const current = loadStorage();
-  const existingSkus = new Set(current.map((p) => p.sku.toUpperCase()));
   const errors: string[] = [];
-  const toAdd: Product[] = [];
-  const now = new Date().toISOString();
+  let importedCount = 0;
 
-  incoming.forEach((row, idx) => {
-    const rowNum = idx + 1;
-    if (!row.name || !row.name.trim()) {
-      errors.push(`Row ${rowNum}: Name is required.`);
-      return;
+  for (let i = 0; i < incoming.length; i++) {
+    const row = incoming[i];
+    const rowNum = i + 1;
+    try {
+      if (!row.name?.trim() || !row.sku?.trim()) {
+        errors.push(`Row ${rowNum}: Name and SKU are required.`);
+        continue;
+      }
+      await createProduct({
+        name: row.name.trim(),
+        sku: row.sku.trim().toUpperCase(),
+        category: row.category || CATEGORIES[0],
+        description: row.description,
+        status: row.status || 'active',
+        featured: Boolean(row.featured),
+        variants:
+          row.variants && row.variants.length > 0
+            ? row.variants
+            : [
+                {
+                  id: `var-imp-${Date.now()}-${i}`,
+                  strength: row.spec || '5mg',
+                  price: Number(row.price) || 99,
+                  stock: (row.stock as ProductVariant['stock']) || 'in_stock',
+                },
+              ],
+      });
+      importedCount++;
+    } catch (e: any) {
+      errors.push(`Row ${rowNum}: ${e?.message || 'Import failed'}`);
     }
-    if (!row.sku || !row.sku.trim()) {
-      errors.push(`Row ${rowNum}: SKU is required.`);
-      return;
-    }
-    const cleanSku = row.sku.trim().toUpperCase();
-    if (existingSkus.has(cleanSku)) {
-      errors.push(`Row ${rowNum}: Duplicate SKU "${cleanSku}" already exists.`);
-      return;
-    }
-
-    existingSkus.add(cleanSku);
-    const priceNum = typeof row.price === 'number' ? row.price : parseFloat(String(row.price || 0));
-
-    toAdd.push({
-      id: `prod-imp-${Date.now().toString(36)}-${idx}`,
-      sku: cleanSku,
-      name: row.name.trim(),
-      spec: (row.spec || '5mg*10vials').trim(),
-      category: (row.category || 'Specialty Research').trim(),
-      price: isNaN(priceNum) || priceNum <= 0 ? 99 : priceNum,
-      comparePrice: row.comparePrice ? Number(row.comparePrice) : undefined,
-      stock: (row.stock as any) || 'in_stock',
-      purity: typeof row.purity === 'number' ? row.purity : 99.5,
-      status: (row.status as any) || 'active',
-      featured: Boolean(row.featured),
-      image: row.image || undefined,
-      description: row.description || '',
-      tags: Array.isArray(row.tags) ? row.tags : [],
-      createdAt: now,
-      updatedAt: now,
-    });
-  });
-
-  if (toAdd.length > 0) {
-    const combined = [...toAdd, ...current];
-    saveStorage(combined);
   }
 
-  return { importedCount: toAdd.length, errors };
+  return { importedCount, errors };
 }
 
-/**
- * Reset dataset back to fresh seed products
- */
 export async function resetToSeed(): Promise<Product[]> {
-  await delay(150);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_PRODUCTS));
-  return [...SEED_PRODUCTS];
+  throw new Error('Reset to seed is not available with the MySQL API. Use npm run seed on the backend.');
 }
+
+export { CATEGORIES };

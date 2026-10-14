@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Search, ShieldCheck, ShoppingBag, Filter, Sparkles, Check } from 'lucide-react';
 import { BiopeptiLogo } from '../common/BiopeptiLogo';
 import { useProducts } from '../../context/ProductsContext';
+import { formatPriceRange, getStrengthsLabel } from '../../types/product';
 
 interface StorefrontPreviewModalProps {
   isOpen: boolean;
@@ -28,7 +29,7 @@ export const StorefrontPreviewModal: React.FC<StorefrontPreviewModalProps> = ({
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku.toLowerCase().includes(search.toLowerCase()) ||
-      p.spec.toLowerCase().includes(search.toLowerCase());
+      getStrengthsLabel(p).toLowerCase().includes(search.toLowerCase());
     const matchesCat = selectedCat === 'All' || p.category === selectedCat;
     return matchesSearch && matchesCat;
   });
@@ -162,9 +163,6 @@ export const StorefrontPreviewModal: React.FC<StorefrontPreviewModalProps> = ({
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                       />
-                      <span className="absolute top-2 left-2 text-[10px] font-mono font-bold bg-[#0A2358]/80 text-white px-2 py-0.5 rounded-md">
-                        {product.purity}% Purity
-                      </span>
                     </div>
 
                     <div className="flex items-start justify-between gap-1">
@@ -172,7 +170,9 @@ export const StorefrontPreviewModal: React.FC<StorefrontPreviewModalProps> = ({
                         <h4 className="font-['Sora'] font-bold text-sm text-[#0A2358]">
                           {product.name}
                         </h4>
-                        <p className="text-xs text-[#5F7088] font-medium">{product.spec}</p>
+                        <p className="text-xs text-[#5F7088] font-medium">
+                          {getStrengthsLabel(product)}
+                        </p>
                       </div>
                       <span className="text-[10px] font-mono text-[#5F7088] bg-slate-100 px-1.5 py-0.5 rounded">
                         {product.sku}
@@ -187,13 +187,8 @@ export const StorefrontPreviewModal: React.FC<StorefrontPreviewModalProps> = ({
                   <div className="mt-4 pt-3 border-t border-[#E3EAF2] flex items-center justify-between">
                     <div>
                       <span className="font-mono font-bold text-base text-[#0A2358]">
-                        ${product.price.toFixed(2)}
+                        {formatPriceRange(product)}
                       </span>
-                      {product.comparePrice && (
-                        <span className="font-mono text-xs text-[#5F7088] line-through ml-1.5">
-                          ${product.comparePrice.toFixed(2)}
-                        </span>
-                      )}
                     </div>
 
                     <button

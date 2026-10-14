@@ -50,7 +50,7 @@ export const DeleteConfirmModal: React.FC = () => {
           </h3>
 
           <p id="delete-dialog-desc" className="text-sm text-[#5F7088] mt-2 leading-relaxed">
-            Delete <strong className="text-[#0A2358] font-semibold">{deletingProduct.name} {deletingProduct.spec}</strong> ({deletingProduct.sku})? This will remove it from the active catalog.
+            Delete <strong className="text-[#0A2358] font-semibold">{deletingProduct.name}</strong> ({deletingProduct.sku})? This removes the product and all its strengths from the catalog.
           </p>
 
           <p className="text-xs text-[#5F7088] mt-2 bg-slate-50 p-2.5 rounded-xl border border-[#E3EAF2]">

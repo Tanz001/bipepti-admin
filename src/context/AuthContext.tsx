@@ -1,4 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+  useCallback,
+} from 'react';
+import * as authApi from '../lib/authApi';
+import { getToken, USER_KEY } from '../lib/api';
 
 export interface AdminUser {
   name: string;
@@ -10,35 +19,27 @@ export interface AdminUser {
 interface AuthContextType {
   isAuthenticated: boolean;
   user: AdminUser;
+  authReady: boolean;
   login: (email?: string, password?: string) => Promise<boolean>;
   logout: () => void;
+  updateProfile: (updates: { name: string; email: string; role?: string }) => Promise<void>;
 }
 
 const DEFAULT_ADMIN: AdminUser = {
   name: 'Admin',
   email: 'admin@biopepti.com',
-  role: 'Catalog Manager',
+  role: 'Store Admin',
   initials: 'AD',
 };
-
-const AUTH_STORAGE_KEY = 'biopepti_admin_auth';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      // Default to true for instant smooth evaluation unless explicitly logged out
-      return stored !== null ? stored === 'true' : true;
-    } catch {
-      return true;
-    }
-  });
-
+  const [authReady, setAuthReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<AdminUser>(() => {
     try {
-      const stored = localStorage.getItem('biopepti_admin_user');
+      const stored = localStorage.getItem(USER_KEY);
       return stored ? JSON.parse(stored) : DEFAULT_ADMIN;
     } catch {
       return DEFAULT_ADMIN;
@@ -46,40 +47,65 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
 
   useEffect(() => {
-    try {
-      localStorage.setItem(AUTH_STORAGE_KEY, String(isAuthenticated));
-    } catch (e) {
-      console.error(e);
+    let cancelled = false;
+
+    async function bootstrap() {
+      const token = getToken();
+      if (!token) {
+        if (!cancelled) {
+          setIsAuthenticated(false);
+          setAuthReady(true);
+        }
+        return;
+      }
+
+      try {
+        const me = await authApi.fetchMe();
+        if (!cancelled) {
+          setUser(me);
+          setIsAuthenticated(true);
+        }
+      } catch {
+        authApi.clearAuthSession();
+        if (!cancelled) setIsAuthenticated(false);
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
     }
-  }, [isAuthenticated]);
 
-  const login = async (email?: string, password?: string): Promise<boolean> => {
-    // Mock login delay
-    await new Promise((res) => setTimeout(res, 350));
-    const cleanEmail = email?.trim() || 'admin@biopepti.com';
-    const cleanName = cleanEmail.split('@')[0] || 'Admin';
-    const initials = cleanName.substring(0, 2).toUpperCase() || 'AD';
-
-    const newUser: AdminUser = {
-      name: cleanName.charAt(0).toUpperCase() + cleanName.slice(1),
-      email: cleanEmail,
-      role: 'Store Admin',
-      initials,
+    bootstrap();
+    return () => {
+      cancelled = true;
     };
+  }, []);
 
-    setUser(newUser);
+  const login = useCallback(async (email?: string, password?: string): Promise<boolean> => {
+    if (!email?.trim() || !password) {
+      throw new Error('Email and password are required');
+    }
+    const loggedIn = await authApi.loginRequest(email.trim(), password);
+    setUser(loggedIn);
     setIsAuthenticated(true);
-    localStorage.setItem('biopepti_admin_user', JSON.stringify(newUser));
     return true;
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
+    authApi.clearAuthSession();
     setIsAuthenticated(false);
-    localStorage.setItem(AUTH_STORAGE_KEY, 'false');
-  };
+  }, []);
+
+  const updateProfile = useCallback(
+    async (updates: { name: string; email: string; role?: string }) => {
+      const next = await authApi.updateProfileRequest(updates);
+      setUser(next);
+    },
+    []
+  );
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
+    <AuthContext.Provider
+      value={{ isAuthenticated, user, authReady, login, logout, updateProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );

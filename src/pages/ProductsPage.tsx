@@ -23,7 +23,7 @@ export const ProductsPage: React.FC = () => {
             </span>
           </div>
           <p className="text-xs sm:text-sm text-[#5F7088] mt-1 font-medium">
-            Manage your catalog, pricing, batch specifications and stock
+            Add, edit, or remove products from your catalog
           </p>
         </div>
 
