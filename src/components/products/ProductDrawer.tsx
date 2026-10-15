@@ -20,7 +20,7 @@ import { useProducts } from '../../context/ProductsContext';
 
 const variantSchema = z.object({
   id: z.string(),
-  strength: z.string().min(1, 'Strength required (e.g. 5mg)'),
+  strength: z.string().min(1, 'Strength required (e.g. 5mg/vial*10 vials)'),
   price: z.coerce.number().positive('Price must be greater than 0'),
   stock: z.enum(['in_stock', 'low', 'out_of_stock']),
   sku: z.string().optional(),
@@ -49,7 +49,7 @@ type ProductFormData = z.infer<typeof productSchema>;
 
 const emptyVariant = () => ({
   id: createVariantId(),
-  strength: '5mg',
+  strength: '5mg/vial*10 vials',
   price: 99,
   stock: 'in_stock' as const,
   sku: '',
@@ -91,7 +91,10 @@ export const ProductDrawer: React.FC = () => {
       description: '',
       buyLink: '',
       status: 'active',
-      variants: [emptyVariant(), { ...emptyVariant(), strength: '10mg', price: 149 }],
+      variants: [
+        emptyVariant(),
+        { ...emptyVariant(), strength: '10mg/vial*10 vials', price: 149 },
+      ],
     },
   });
 
@@ -135,7 +138,7 @@ export const ProductDrawer: React.FC = () => {
         status: 'active',
         variants: [
           emptyVariant(),
-          { ...emptyVariant(), strength: '10mg', price: 149 },
+          { ...emptyVariant(), strength: '10mg/vial*10 vials', price: 149 },
         ],
       });
       setImagePreview(VIAL_PLACEHOLDER_SVG);
@@ -495,7 +498,7 @@ export const ProductDrawer: React.FC = () => {
                   {/* Column headers */}
                   <div className="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 px-0.5">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-[#5F7088]">
-                      Strength
+                      Size / pack
                     </span>
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-[#5F7088]">
                       Price (USD)
@@ -515,7 +518,7 @@ export const ProductDrawer: React.FC = () => {
                         <input
                           type="text"
                           {...register(`variants.${index}.strength`)}
-                          placeholder="5mg"
+                          placeholder="5mg/vial*10 vials"
                           className="w-full h-10 px-3 text-sm border border-[#E3EAF2] rounded-xl focus:border-[#1C7FDB] outline-none"
                         />
                         {errors.variants?.[index]?.strength && (
