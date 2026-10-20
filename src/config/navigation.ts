@@ -1,4 +1,4 @@
-import { LucideIcon, LayoutDashboard, Package, Settings } from 'lucide-react';
+import { LucideIcon, LayoutDashboard, Package, Settings, FileCheck2 } from 'lucide-react';
 
 export interface NavItemConfig {
   id: string;
@@ -21,6 +21,12 @@ export const SIDEBAR_NAV_ITEMS: NavItemConfig[] = [
     href: '/admin/products',
     icon: Package,
     badgeType: 'count',
+  },
+  {
+    id: 'lab-reports',
+    label: 'Lab Reports',
+    href: '/admin/lab-reports',
+    icon: FileCheck2,
   },
   {
     id: 'settings',

@@ -14,6 +14,7 @@ import { ProductsProvider } from './context/ProductsContext';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProductsPage } from './pages/ProductsPage';
+import { LabReportsPage } from './pages/LabReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -70,6 +71,7 @@ export default function App() {
                 <Route index element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="products" element={<ProductsPage />} />
+                <Route path="lab-reports" element={<LabReportsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
 
